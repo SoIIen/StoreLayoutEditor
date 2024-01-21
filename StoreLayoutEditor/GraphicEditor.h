@@ -6,6 +6,7 @@ using namespace System::Xml;
 namespace Support {
 	enum class Orientation { Horizontal, Vertical };
 	enum class DragMode { None, Move, Resize };
+	enum class Direction { Up, Down, Left, Right };
 };
 
 namespace Primitive {
@@ -23,10 +24,6 @@ namespace Primitive {
 		bool isDragging;
 		Drawing::Point previousLocation;
 		GraphicElementContainer^ parentContainer;
-
-		virtual void onMouseUp(Object^ sender, Windows::Forms::MouseEventArgs^ e) {};
-		virtual void onMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) {};
-		virtual void onMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) {};
 
 	public:
 		virtual void updateGraphic() = 0;
@@ -104,6 +101,7 @@ namespace GraphicObject {
 	public:
 		DraggableRectangle(Drawing::Color color, int width, int height) {
 			InitializeComponents();
+			this->DoubleBuffered = true;
 			this->BackColor = color;
 			if (width > 10 && height > 10)
 				this->Size = Drawing::Size(width, height);
@@ -178,42 +176,36 @@ namespace GraphicObject {
 	protected:
 		literal int ResizeHandleSize = 8;
 		Support::DragMode dragMode = Support::DragMode::None;
-		int dragOffsetX;
-		int dragOffsetY;
 		Drawing::Point resizeStartPoint;
 		bool showResizeHandle;
 
-		bool IsInResizeZone(Drawing::Point point) {
+		virtual bool IsInResizeZone(Drawing::Point point) {
 			return point.X >= this->Width - ResizeHandleSize && point.Y >= this->Height - ResizeHandleSize;
 		}
 
-
 		System::ComponentModel::Container^ components;
-		void InitializeComponents() {
+		virtual void InitializeComponents() {
 			components = gcnew System::ComponentModel::Container();
-			this->MouseDown += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::onMouseDown);
-			this->MouseMove += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::onMouseMove);
-			this->MouseUp += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::onMouseUp);
+			this->MouseDown += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::OnMouseDown);
+			this->MouseMove += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::OnMouseMove);
+			this->MouseUp += gcnew System::Windows::Forms::MouseEventHandler(this, &DraggableRectangle::OnMouseUp);
 			this->MouseEnter += gcnew EventHandler(this, &DraggableRectangle::OnMouseEnter);
 			this->MouseLeave += gcnew EventHandler(this, &DraggableRectangle::OnMouseLeave);
 		}
 
-		virtual void onMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+		virtual void OnMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
 			if (e->Button == System::Windows::Forms::MouseButtons::Left) {
-				dragOffsetX = e->X;
-				dragOffsetY = e->Y;
+				this->previousLocation = e->Location;
 
 				if (IsInResizeZone(e->Location)) {
 					dragMode = Support::DragMode::Resize;
 					resizeStartPoint = this->PointToScreen(e->Location);
-					this->Capture = true;
 				}
 				else {
 					dragMode = Support::DragMode::Move;
-					this->previousLocation = e->Location;
-					this->Capture = true;
 				}
 				isDragging = true;
+				this->Capture = true;
 			}
 			if (e->Button == System::Windows::Forms::MouseButtons::Right) {
 				auto container = this->GetParentContainer();
@@ -227,23 +219,23 @@ namespace GraphicObject {
 			}
 		}
 
-		virtual void onMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
-			if (isDragging) {
-				if (dragMode == Support::DragMode::Move) {
-					this->Location = Drawing::Point(this->Left + e->X - dragOffsetX, this->Top + e->Y - dragOffsetY);
-					this->Invalidate();
-				}
-				else if (dragMode == Support::DragMode::Resize) {
-					Drawing::Point screenPoint = this->PointToScreen(e->Location);
-					this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
-					this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
-					resizeStartPoint = screenPoint;
-					this->Invalidate();
-				}
+		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+			if (!isDragging) return;
+
+			if (dragMode == Support::DragMode::Move) {
+				this->Location = Drawing::Point(this->Left + e->X - previousLocation.X, this->Top + e->Y - previousLocation.Y);
 			}
+			else if (dragMode == Support::DragMode::Resize) {
+				Drawing::Point screenPoint = this->PointToScreen(e->Location);
+				this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
+				this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
+				resizeStartPoint = screenPoint;
+			}
+
+			this->Invalidate();
 		}
 
-		virtual void onMouseUp(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+		virtual void OnMouseUp(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
 			if (e->Button == System::Windows::Forms::MouseButtons::Left) {
 				this->Capture = false;
 				isDragging = false;
@@ -342,28 +334,269 @@ namespace GraphicObject {
 	protected:
 		Support::Orientation orientation;
 
-		virtual void onMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
-			if (isDragging) {
-				if (dragMode == Support::DragMode::Resize) {
-					Drawing::Point screenPoint = this->PointToScreen(e->Location);
+		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+			if (!isDragging) return;
 
-					switch (orientation) {
-					case Support::Orientation::Vertical:
-						this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
-						resizeStartPoint.Y = screenPoint.Y;
-						break;
-					case Support::Orientation::Horizontal:
-						this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
-						resizeStartPoint.X = screenPoint.X;
-						break;
-					}
+			if (dragMode == Support::DragMode::Move) {
+				this->Location = Drawing::Point(this->Left + e->X - previousLocation.X, this->Top + e->Y - previousLocation.Y);
+			}
+			else if (dragMode == Support::DragMode::Resize) {
+				Drawing::Point screenPoint = this->PointToScreen(e->Location);
 
-					this->Invalidate();
-				}
-				else {
-					DraggableRectangle::onMouseMove(sender, e);
+				switch (orientation) {
+				case Support::Orientation::Vertical:
+					this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
+					resizeStartPoint.Y = screenPoint.Y;
+					break;
+				case Support::Orientation::Horizontal:
+					this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
+					resizeStartPoint.X = screenPoint.X;
+					break;
 				}
 			}
+
+			this->Invalidate();
+		}
+	};
+
+	public ref class Arrow : public FixedSideRectangle {
+	public:
+
+		Arrow(Support::Direction direction) {
+			InitializeComponents();
+			this->DoubleBuffered = true;
+			this->direction = direction;
+			this->orientation = GetOrientation(this->direction);
+			this->BackColor = Drawing::Color::Empty;
+			this->Width = 16;
+			this->Height = 16;
+			setTrianglePoints();
+			setShaftPoints();
+			this->MouseMove -= gcnew System::Windows::Forms::MouseEventHandler(this, &Arrow::OnMouseMove);
+		}
+
+		Arrow() : FixedSideRectangle() {
+			InitializeComponents();
+			this->DoubleBuffered = true;
+			this->direction = Support::Direction::Up;
+			this->orientation = GetOrientation(this->direction);
+			this->BackColor = Drawing::Color::Empty;
+			this->Width = 16;
+			this->Height = 16;
+			setTrianglePoints();
+			setShaftPoints();
+			this->MouseMove -= gcnew System::Windows::Forms::MouseEventHandler(this, &Arrow::OnMouseMove);
+		}
+
+		virtual void serialize(System::Xml::XmlWriter^ writer) override {
+			writer->WriteStartElement(this->GetType()->Name);
+
+			writer->WriteStartElement("Location");
+			writer->WriteElementString("X", this->Location.X.ToString());
+			writer->WriteElementString("Y", this->Location.Y.ToString());
+			writer->WriteEndElement();
+
+			writer->WriteStartElement("Size");
+			writer->WriteElementString("Width", this->Size.Width.ToString());
+			writer->WriteElementString("Height", this->Size.Height.ToString());
+			writer->WriteEndElement();
+
+			writer->WriteStartElement("BackColor");
+			writer->WriteElementString("ARGB", this->BackColor.ToArgb().ToString());
+			writer->WriteEndElement();
+
+			writer->WriteStartElement("Orientation");
+			writer->WriteElementString("FixedSide", ((int)orientation).ToString());
+			writer->WriteEndElement();
+
+			writer->WriteStartElement("Direction");
+			writer->WriteElementString("Value", ((int)direction).ToString());
+			writer->WriteEndElement();
+
+			writer->WriteEndElement();
+		}
+
+		static Arrow^ deserialize(System::Xml::XmlReader^ reader) {
+			Arrow^ arrow = gcnew Arrow();
+			reader->Read();
+			if (reader->Name == "Location") {
+				reader->ReadStartElement();
+				int x = Int32::Parse(reader->ReadElementString("X"));
+				int y = Int32::Parse(reader->ReadElementString("Y"));
+				arrow->Location = Drawing::Point(x, y);
+				reader->ReadEndElement();
+			}
+			if (reader->Name == "Size") {
+				reader->ReadStartElement();
+				int width = Int32::Parse(reader->ReadElementString("Width"));
+				int height = Int32::Parse(reader->ReadElementString("Height"));
+				arrow->Size = Drawing::Size(width, height);
+				reader->ReadEndElement();
+			}
+			if (reader->Name == "BackColor") {
+				reader->ReadStartElement();
+				String^ argbValue = reader->ReadElementString("ARGB");
+				arrow->BackColor = Drawing::Color::FromArgb(Int32::Parse(argbValue));
+				reader->ReadEndElement();
+			}
+			if (reader->Name == "Orientation") {
+				reader->ReadStartElement();
+				int orientationValue = Int32::Parse(reader->ReadElementString("FixedSide"));
+				arrow->orientation = (Support::Orientation)orientationValue;
+				reader->ReadEndElement();
+			}
+			if (reader->Name == "Direction") {
+				reader->ReadStartElement();
+				int directionValue = Int32::Parse(reader->ReadElementString("Value"));
+				arrow->direction = (Support::Direction)directionValue;
+				reader->ReadEndElement();
+			}
+
+			return arrow;
+		}
+
+	protected:
+		Support::Direction direction;
+		Drawing::Point ResizeHandleLocation;
+		array<Drawing::Point>^ trianglePoints = gcnew array<Drawing::Point>(3);
+		array<Drawing::Point>^ shaftPoints = gcnew array<Drawing::Point>(4);
+
+		virtual bool IsInResizeZone(Drawing::Point point) override {
+			return (point.X >= ResizeHandleLocation.X && point.X <= ResizeHandleLocation.X + ResizeHandleSize) &&
+				(point.Y >= ResizeHandleLocation.Y && point.Y <= ResizeHandleLocation.Y + ResizeHandleSize);
+		}
+
+		static Support::Orientation GetOrientation(Support::Direction direction) {
+			switch (direction) {
+			case Support::Direction::Up:
+			case Support::Direction::Down:
+				return Support::Orientation::Vertical;
+			case Support::Direction::Left:
+			case Support::Direction::Right:
+				return Support::Orientation::Horizontal;
+			}
+		}
+
+		virtual void setTrianglePoints() {
+			switch (direction) {
+			case Support::Direction::Up:
+				trianglePoints[0] = Drawing::Point(this->Width / 2, 0);
+				trianglePoints[1] = Drawing::Point(this->Width / 2 - ResizeHandleSize, ResizeHandleSize);
+				trianglePoints[2] = Drawing::Point(this->Width / 2 + ResizeHandleSize, ResizeHandleSize);
+				break;
+			case Support::Direction::Down:
+				trianglePoints[0] = Drawing::Point(this->Width / 2, this->Height);
+				trianglePoints[1] = Drawing::Point(this->Width / 2 - ResizeHandleSize, this->Height - ResizeHandleSize);
+				trianglePoints[2] = Drawing::Point(this->Width / 2 + ResizeHandleSize, this->Height - ResizeHandleSize);
+				break;
+			case Support::Direction::Left:
+				trianglePoints[0] = Drawing::Point(0, this->Height / 2);
+				trianglePoints[1] = Drawing::Point(ResizeHandleSize, this->Height / 2 - ResizeHandleSize);
+				trianglePoints[2] = Drawing::Point(ResizeHandleSize, this->Height / 2 + ResizeHandleSize);
+				break;
+			case Support::Direction::Right:
+				trianglePoints[0] = Drawing::Point(this->Width, this->Height / 2);
+				trianglePoints[1] = Drawing::Point(this->Width - ResizeHandleSize, this->Height / 2 - ResizeHandleSize);
+				trianglePoints[2] = Drawing::Point(this->Width - ResizeHandleSize, this->Height / 2 + ResizeHandleSize);
+				break;
+			}
+		}
+
+		virtual void setShaftPoints() {
+			switch (direction) {
+			case Support::Direction::Up:
+				shaftPoints[0] = Drawing::Point(ResizeHandleSize / 2, ResizeHandleSize);
+				shaftPoints[1] = Drawing::Point(this->Width - ResizeHandleSize / 2, ResizeHandleSize);
+				shaftPoints[2] = Drawing::Point(this->Width - ResizeHandleSize / 2, this->Height);
+				shaftPoints[3] = Drawing::Point(ResizeHandleSize / 2, this->Height);
+				break;
+			case Support::Direction::Down:
+				shaftPoints[0] = Drawing::Point(ResizeHandleSize / 2, 0);
+				shaftPoints[1] = Drawing::Point(this->Width - ResizeHandleSize / 2, 0);
+				shaftPoints[2] = Drawing::Point(this->Width - ResizeHandleSize / 2, this->Height - ResizeHandleSize);
+				shaftPoints[3] = Drawing::Point(ResizeHandleSize / 2, this->Height - ResizeHandleSize);
+				break;
+			case Support::Direction::Left:
+				shaftPoints[0] = Drawing::Point(ResizeHandleSize, ResizeHandleSize / 2);
+				shaftPoints[1] = Drawing::Point(ResizeHandleSize, this->Height - ResizeHandleSize / 2);
+				shaftPoints[2] = Drawing::Point(this->Width, this->Height - ResizeHandleSize / 2);
+				shaftPoints[3] = Drawing::Point(this->Width, ResizeHandleSize / 2);
+				break;
+			case Support::Direction::Right:
+				shaftPoints[0] = Drawing::Point(0, ResizeHandleSize / 2);
+				shaftPoints[1] = Drawing::Point(0, this->Height - ResizeHandleSize / 2);
+				shaftPoints[3] = Drawing::Point(this->Width - ResizeHandleSize, ResizeHandleSize / 2);
+				shaftPoints[2] = Drawing::Point(this->Width - ResizeHandleSize, this->Height - ResizeHandleSize / 2);
+				break;
+			}
+		}
+
+		virtual void OnPaint(Windows::Forms::PaintEventArgs^ e) override {
+			GraphicElement::OnPaint(e);
+
+			e->Graphics->FillPolygon(gcnew Drawing::SolidBrush(Drawing::Color::Black), trianglePoints);
+			e->Graphics->FillPolygon(gcnew Drawing::SolidBrush(Drawing::Color::Black), shaftPoints);
+
+			if (showResizeHandle) {
+				ResizeHandleLocation = CalculateResizeHandleLocation();
+				e->Graphics->FillRectangle(gcnew Drawing::SolidBrush(Drawing::Color::Gold),
+					ResizeHandleLocation.X,
+					ResizeHandleLocation.Y,
+					ResizeHandleSize,
+					ResizeHandleSize);
+			}
+		}
+
+		Drawing::Point CalculateResizeHandleLocation() {
+			int x = 0;
+			int y = 0;
+
+			switch (direction) {
+			case Support::Direction::Down:
+				x = (this->Width - ResizeHandleSize) / 2;
+				y = 0;
+				break;
+			case Support::Direction::Up:
+				x = (this->Width - ResizeHandleSize) / 2;
+				y = this->Height - ResizeHandleSize;
+				break;
+			case Support::Direction::Right:
+				x = 0;
+				y = (this->Height - ResizeHandleSize) / 2;
+				break;
+			case Support::Direction::Left:
+				x = this->Width - ResizeHandleSize;
+				y = (this->Height - ResizeHandleSize) / 2;
+				break;
+			}
+
+			return Drawing::Point(x, y);
+		}
+
+		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+			if (!isDragging) return;
+
+			if (dragMode == Support::DragMode::Move) {
+				this->Location = Drawing::Point(this->Left + e->X - previousLocation.X, this->Top + e->Y - previousLocation.Y);
+			}
+			else if (dragMode == Support::DragMode::Resize) {
+				Drawing::Point screenPoint = this->PointToScreen(e->Location);
+
+				switch (orientation) {
+				case Support::Orientation::Vertical:
+					this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
+					resizeStartPoint.Y = screenPoint.Y;
+					break;
+				case Support::Orientation::Horizontal:
+					this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
+					resizeStartPoint.X = screenPoint.X;
+					break;
+				}
+			}
+
+			setTrianglePoints();
+			setShaftPoints();
+			this->Invalidate();
 		}
 	};
 
@@ -392,10 +625,9 @@ namespace GraphicObject {
 			FixedSideRectangle::OnMouseClick(e);
 		}
 
-		virtual void onMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+		virtual void OnMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
 			if (e->Button == System::Windows::Forms::MouseButtons::Left) {
-				dragOffsetX = e->X;
-				dragOffsetY = e->Y;
+				this->previousLocation = e->Location;
 
 				if (IsInResizeZone(e->Location)) {
 					dragMode = Support::DragMode::Resize;
@@ -404,7 +636,6 @@ namespace GraphicObject {
 				}
 				else {
 					dragMode = Support::DragMode::Move;
-					this->previousLocation = e->Location;
 					this->Capture = true;
 				}
 				isDragging = true;
@@ -490,46 +721,46 @@ namespace GraphicObject {
 		}
 
 		static WallFeature^ deserialize(System::Xml::XmlReader^ reader) {
-			WallFeature^ rectangle = gcnew WallFeature();
+			WallFeature^ wallFeature = gcnew WallFeature();
 			reader->Read();
 			if (reader->Name == "Location") {
 				reader->ReadStartElement();
 				int x = Int32::Parse(reader->ReadElementString("X"));
 				int y = Int32::Parse(reader->ReadElementString("Y"));
-				rectangle->Location = Drawing::Point(x, y);
+				wallFeature->Location = Drawing::Point(x, y);
 				reader->ReadEndElement();
 			}
 			if (reader->Name == "Size") {
 				reader->ReadStartElement();
 				int width = Int32::Parse(reader->ReadElementString("Width"));
 				int height = Int32::Parse(reader->ReadElementString("Height"));
-				rectangle->Size = Drawing::Size(width, height);
+				wallFeature->Size = Drawing::Size(width, height);
 				reader->ReadEndElement();
 			}
 			if (reader->Name == "BackColor") {
 				reader->ReadStartElement();
 				String^ argbValue = reader->ReadElementString("ARGB");
-				rectangle->BackColor = Drawing::Color::FromArgb(Int32::Parse(argbValue));
+				wallFeature->BackColor = Drawing::Color::FromArgb(Int32::Parse(argbValue));
 				reader->ReadEndElement();
 			}
 			if (reader->Name == "Orientation") {
 				reader->ReadStartElement();
 				int orientationValue = Int32::Parse(reader->ReadElementString("FixedSide"));
-				rectangle->orientation = (Support::Orientation)orientationValue;
+				wallFeature->orientation = (Support::Orientation)orientationValue;
 				reader->ReadEndElement();
 			}
 
-			return rectangle;
+			return wallFeature;
 		}
 
 	protected:
-		virtual void onMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
 			if (isDragging) {
 				Wall^ wall = dynamic_cast<Wall^>(this->Parent);
 
 				if (dragMode == Support::DragMode::Move) {
-					int newX = this->Left + e->X - dragOffsetX;
-					int newY = this->Top + e->Y - dragOffsetY;
+					int newX = this->Left + e->X - previousLocation.X;
+					int newY = this->Top + e->Y - previousLocation.Y;
 
 					newX = Math::Max(newX, 0);
 					newY = Math::Max(newY, 0);
@@ -556,14 +787,12 @@ namespace GraphicObject {
 			}
 		}
 
-		virtual void onMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
-			FixedSideRectangle::onMouseDown(sender, e);
+		virtual void OnMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
+			FixedSideRectangle::OnMouseDown(sender, e);
 
 			if (e->Button == System::Windows::Forms::MouseButtons::Left) {
 				Wall^ wall = dynamic_cast<Wall^>(this->Parent);
-
-				dragOffsetX = e->X;
-				dragOffsetY = e->Y;
+				this->previousLocation = e->Location;
 
 				if (IsInResizeZone(e->Location)) {
 					dragMode = Support::DragMode::Resize;
@@ -649,32 +878,32 @@ namespace GraphicObject {
 	}
 
 	inline Wall^ Wall::deserialize(System::Xml::XmlReader^ reader) {
-		Wall^ rectangle = gcnew Wall();
+		Wall^ wall = gcnew Wall();
 		reader->Read();
 		if (reader->Name == "Location") {
 			reader->ReadStartElement();
 			int x = Int32::Parse(reader->ReadElementString("X"));
 			int y = Int32::Parse(reader->ReadElementString("Y"));
-			rectangle->Location = Drawing::Point(x, y);
+			wall->Location = Drawing::Point(x, y);
 			reader->ReadEndElement();
 		}
 		if (reader->Name == "Size") {
 			reader->ReadStartElement();
 			int width = Int32::Parse(reader->ReadElementString("Width"));
 			int height = Int32::Parse(reader->ReadElementString("Height"));
-			rectangle->Size = Drawing::Size(width, height);
+			wall->Size = Drawing::Size(width, height);
 			reader->ReadEndElement();
 		}
 		if (reader->Name == "BackColor") {
 			reader->ReadStartElement();
 			String^ argbValue = reader->ReadElementString("ARGB");
-			rectangle->BackColor = Drawing::Color::FromArgb(Int32::Parse(argbValue));
+			wall->BackColor = Drawing::Color::FromArgb(Int32::Parse(argbValue));
 			reader->ReadEndElement();
 		}
 		if (reader->Name == "Orientation") {
 			reader->ReadStartElement();
 			int orientationValue = Int32::Parse(reader->ReadElementString("FixedSide"));
-			rectangle->orientation = (Support::Orientation)orientationValue;
+			wall->orientation = (Support::Orientation)orientationValue;
 			reader->ReadEndElement();
 		}
 		if (reader->Name == "Features") {
@@ -682,15 +911,14 @@ namespace GraphicObject {
 			while (!(reader->NodeType == XmlNodeType::EndElement && reader->Name == "Features") && reader->Read()) {
 				if (reader->NodeType == XmlNodeType::Element) {
 					WallFeature^ feature = WallFeature::deserialize(reader);
-					rectangle->AddWallFeature(feature);
+					wall->AddWallFeature(feature);
 				}
 			}
 			reader->ReadEndElement();
 		}
 
-		return rectangle;
+		return wall;
 	}
-
 }
 
 namespace Primitive {
@@ -714,6 +942,9 @@ namespace Primitive {
 						}
 						else if (typeName == "Wall") {
 							element = GraphicObject::Wall::deserialize(reader);
+						}
+						else if (typeName == "Arrow") {
+							element = GraphicObject::Arrow::deserialize(reader);
 						}
 						if (element != nullptr) {
 							this->addElement(element);
