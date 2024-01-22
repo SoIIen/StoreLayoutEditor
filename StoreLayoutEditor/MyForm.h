@@ -775,24 +775,28 @@ private: System::Void Click_AddArrowUp(System::Object^ sender, System::EventArgs
 	this->pictureBox1->Controls->Add(newArrow);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
+	newArrow->BringToFront();
 }
 private: System::Void Click_AddArrowDown(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Down);
 	this->pictureBox1->Controls->Add(newArrow);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
+	newArrow->BringToFront();
 }
 private: System::Void Click_AddArrowLeft(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Left);
 	this->pictureBox1->Controls->Add(newArrow);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
+	newArrow->BringToFront();
 }
 private: System::Void Click_AddArrowRight(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Right);
 	this->pictureBox1->Controls->Add(newArrow);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
+	newArrow->BringToFront();
 }
 private: System::Void Click_SaveLayoutImage(System::Object^ sender, System::EventArgs^ e) {
 	SaveFileDialog^ saveFileDialog = gcnew SaveFileDialog();

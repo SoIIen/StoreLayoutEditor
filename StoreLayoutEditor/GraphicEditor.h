@@ -359,7 +359,7 @@ namespace GraphicObject {
 		}
 	};
 
-	public ref class Arrow : public FixedSideRectangle {
+	public ref class Arrow : public FixedSideRectangle, Primitive::UserControlSerializible {
 	public:
 
 		Arrow(Support::Direction direction) {
@@ -534,6 +534,9 @@ namespace GraphicObject {
 		virtual void OnPaint(Windows::Forms::PaintEventArgs^ e) override {
 			GraphicElement::OnPaint(e);
 
+			setTrianglePoints();
+			setShaftPoints();
+
 			e->Graphics->FillPolygon(gcnew Drawing::SolidBrush(Drawing::Color::Black), trianglePoints);
 			e->Graphics->FillPolygon(gcnew Drawing::SolidBrush(Drawing::Color::Black), shaftPoints);
 
@@ -594,8 +597,6 @@ namespace GraphicObject {
 				}
 			}
 
-			setTrianglePoints();
-			setShaftPoints();
 			this->Invalidate();
 		}
 	};
@@ -958,6 +959,15 @@ namespace Primitive {
 						throw gcnew NotImplementedException();
 					}
 				}
+			}
+		}
+
+		Collections::Generic::List<GraphicElement^>::Enumerator iteration = this->GraphicElements->GetEnumerator();
+
+		while (iteration.MoveNext()) {
+			GraphicObject::Arrow^ specificElement = dynamic_cast<GraphicObject::Arrow^>(iteration.Current);
+			if (specificElement != nullptr) {
+				specificElement->BringToFront();
 			}
 		}
 	}
