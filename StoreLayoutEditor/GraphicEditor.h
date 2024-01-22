@@ -575,30 +575,6 @@ namespace GraphicObject {
 
 			return Drawing::Point(x, y);
 		}
-
-		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
-			if (!isDragging) return;
-
-			if (dragMode == Support::DragMode::Move) {
-				this->Location = Drawing::Point(this->Left + e->X - previousLocation.X, this->Top + e->Y - previousLocation.Y);
-			}
-			else if (dragMode == Support::DragMode::Resize) {
-				Drawing::Point screenPoint = this->PointToScreen(e->Location);
-
-				switch (orientation) {
-				case Support::Orientation::Vertical:
-					this->Height = Math::Max(this->Height + screenPoint.Y - resizeStartPoint.Y, ResizeHandleSize * 2);
-					resizeStartPoint.Y = screenPoint.Y;
-					break;
-				case Support::Orientation::Horizontal:
-					this->Width = Math::Max(this->Width + screenPoint.X - resizeStartPoint.X, ResizeHandleSize * 2);
-					resizeStartPoint.X = screenPoint.X;
-					break;
-				}
-			}
-
-			this->Invalidate();
-		}
 	};
 
 	ref class WallFeature;
@@ -674,6 +650,12 @@ namespace GraphicObject {
 			}
 		}
 
+		void removeWallFeature(WallFeature^ e) {
+			if (this->features->Contains(e)) {
+				this->features->Remove(e);
+			}
+		}
+
 		int GetWallWidth() {
 			return this->Width;
 		}
@@ -692,10 +674,14 @@ namespace GraphicObject {
 
 	public ref class WallFeature : public FixedSideRectangle {
 	public:
-		WallFeature(Drawing::Color color, Support::Orientation orientation, int dimension)
-			: FixedSideRectangle(color, orientation, dimension, dimension) {}
+		WallFeature(Drawing::Color color, Support::Orientation orientation, int dimension, Wall^ wall)
+			: FixedSideRectangle(color, orientation, dimension, dimension), parentWall(wall) {}
 
 		WallFeature() : FixedSideRectangle() {};
+
+		void SetParentWall(Wall^ wall) {
+			parentWall = wall;
+		}
 
 		virtual void serialize(System::Xml::XmlWriter^ writer) override {
 			writer->WriteStartElement(this->GetType()->Name);
@@ -755,6 +741,8 @@ namespace GraphicObject {
 		}
 
 	protected:
+		Wall^ parentWall;
+
 		virtual void OnMouseMove(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
 			if (isDragging) {
 				Wall^ wall = dynamic_cast<Wall^>(this->Parent);
@@ -789,8 +777,6 @@ namespace GraphicObject {
 		}
 
 		virtual void OnMouseDown(Object^ sender, Windows::Forms::MouseEventArgs^ e) override {
-			FixedSideRectangle::OnMouseDown(sender, e);
-
 			if (e->Button == System::Windows::Forms::MouseButtons::Left) {
 				Wall^ wall = dynamic_cast<Wall^>(this->Parent);
 				this->previousLocation = e->Location;
@@ -803,6 +789,17 @@ namespace GraphicObject {
 					);
 					isDragging = true;
 					this->Capture = true;
+				}
+			}
+			if (e->Button == System::Windows::Forms::MouseButtons::Right) {
+				auto container = this->GetParentContainer();
+				if (container != nullptr) {
+					container->removeElement(this);
+					if (this->Parent != nullptr) {
+						this->Parent->Controls->Remove(this);
+					}
+					this->parentWall->removeWallFeature(this);
+					delete this;
 				}
 			}
 		}
@@ -822,21 +819,21 @@ namespace GraphicObject {
 
 		if (featureType == "Добавить дверь") {
 			if (this->orientation == Support::Orientation::Horizontal)
-				newFeature = gcnew WallFeature(Drawing::Color::DarkRed, this->orientation, this->Height);
+				newFeature = gcnew WallFeature(Drawing::Color::DarkRed, this->orientation, this->Height, this);
 			else
-				newFeature = gcnew WallFeature(Drawing::Color::DarkRed, this->orientation, this->Width);
+				newFeature = gcnew WallFeature(Drawing::Color::DarkRed, this->orientation, this->Width, this);
 		}
 		else if (featureType == "Добавить окно") {
 			if (this->orientation == Support::Orientation::Horizontal)
-				newFeature = gcnew WallFeature(Drawing::Color::LightSkyBlue, this->orientation, this->Height);
+				newFeature = gcnew WallFeature(Drawing::Color::LightSkyBlue, this->orientation, this->Height, this);
 			else
-				newFeature = gcnew WallFeature(Drawing::Color::LightSkyBlue, this->orientation, this->Width);
+				newFeature = gcnew WallFeature(Drawing::Color::LightSkyBlue, this->orientation, this->Width, this);
 		}
 		else if (featureType == "Добавить проем") {
 			if (this->orientation == Support::Orientation::Horizontal)
-				newFeature = gcnew WallFeature(Drawing::Color::LightGray, this->orientation, this->Height);
+				newFeature = gcnew WallFeature(Drawing::Color::LightGray, this->orientation, this->Height, this);
 			else
-				newFeature = gcnew WallFeature(Drawing::Color::LightGray, this->orientation, this->Width);
+				newFeature = gcnew WallFeature(Drawing::Color::LightGray, this->orientation, this->Width, this);
 		}
 
 		if (newFeature != nullptr) {
@@ -912,6 +909,7 @@ namespace GraphicObject {
 			while (!(reader->NodeType == XmlNodeType::EndElement && reader->Name == "Features") && reader->Read()) {
 				if (reader->NodeType == XmlNodeType::Element) {
 					WallFeature^ feature = WallFeature::deserialize(reader);
+					feature->SetParentWall(wall);
 					wall->AddWallFeature(feature);
 				}
 			}
