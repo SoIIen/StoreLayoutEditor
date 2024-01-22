@@ -1,5 +1,7 @@
 #pragma once
 
+#include <typeinfo>
+
 using namespace System;
 using namespace System::Xml;
 
@@ -965,6 +967,7 @@ namespace Primitive {
 		while (iteration.MoveNext()) {
 			GraphicObject::Arrow^ specificElement = dynamic_cast<GraphicObject::Arrow^>(iteration.Current);
 			if (specificElement != nullptr) {
+				parentControlContainer->SetChildIndex(specificElement, parentControlContainer->Count - 1);
 				specificElement->BringToFront();
 			}
 		}

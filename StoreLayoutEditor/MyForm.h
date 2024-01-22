@@ -686,6 +686,7 @@ private: System::Void Click_LoadLayout(System::Object^ sender, System::EventArgs
 		try {
 			graphicElements->emptyGraphicElements();
 			graphicElements->deserialize(reader, this->pictureBox1->Controls);
+			
 		}
 		finally {
 			reader->Close();
@@ -773,6 +774,7 @@ private: System::Void Click_AddHorizontalWall(System::Object^ sender, System::Ev
 private: System::Void Click_AddArrowUp(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Up);
 	this->pictureBox1->Controls->Add(newArrow);
+	this->pictureBox1->Controls->SetChildIndex(newArrow, this->pictureBox1->Controls->Count - 1);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
 	newArrow->BringToFront();
@@ -780,6 +782,7 @@ private: System::Void Click_AddArrowUp(System::Object^ sender, System::EventArgs
 private: System::Void Click_AddArrowDown(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Down);
 	this->pictureBox1->Controls->Add(newArrow);
+	this->pictureBox1->Controls->SetChildIndex(newArrow, this->pictureBox1->Controls->Count - 1);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
 	newArrow->BringToFront();
@@ -787,6 +790,7 @@ private: System::Void Click_AddArrowDown(System::Object^ sender, System::EventAr
 private: System::Void Click_AddArrowLeft(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Left);
 	this->pictureBox1->Controls->Add(newArrow);
+	this->pictureBox1->Controls->SetChildIndex(newArrow, this->pictureBox1->Controls->Count - 1);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
 	newArrow->BringToFront();
@@ -794,6 +798,7 @@ private: System::Void Click_AddArrowLeft(System::Object^ sender, System::EventAr
 private: System::Void Click_AddArrowRight(System::Object^ sender, System::EventArgs^ e) {
 	GraphicObject::Arrow^ newArrow = gcnew GraphicObject::Arrow(Support::Direction::Right);
 	this->pictureBox1->Controls->Add(newArrow);
+	this->pictureBox1->Controls->SetChildIndex(newArrow, this->pictureBox1->Controls->Count - 1);
 	this->graphicElements->addElement(newArrow);
 	newArrow->Location = Drawing::Point(50, 50);
 	newArrow->BringToFront();
@@ -803,10 +808,20 @@ private: System::Void Click_SaveLayoutImage(System::Object^ sender, System::Even
 	saveFileDialog->Filter = "Image files (*.bmp)|*.bmp";
 
 	if (saveFileDialog->ShowDialog() == Windows::Forms::DialogResult::OK) {
+		for each (Control ^ control in this->pictureBox1->Controls) {
+			if (control->GetType() == GraphicObject::Arrow::typeid) {
+				this->pictureBox1->Controls->SetChildIndex(control, this->pictureBox1->Controls->Count - 1);
+			}
+		}
 		Bitmap^ bmp = gcnew Bitmap(this->pictureBox1->Width, this->pictureBox1->Height);
 		this->pictureBox1->DrawToBitmap(bmp, this->pictureBox1->ClientRectangle);
 		bmp->Save(saveFileDialog->FileName, Imaging::ImageFormat::Bmp);
 		delete bmp;
+		for each (Control ^ control in this->pictureBox1->Controls) {
+			if (control->GetType() == GraphicObject::Arrow::typeid) {
+				control->BringToFront();
+			}
+		}
 	}
 }
 };
